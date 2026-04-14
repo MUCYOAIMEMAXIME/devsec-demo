@@ -343,3 +343,136 @@ class RoleBasedAccessControlTests(TestCase):
         """Test that regular user is not in any privileged groups."""
         self.assertFalse(self.regular_user.groups.filter(name__in=['Staff', 'Instructor']).exists())
 
+
+class IDORPreventionTests(TestCase):
+    """
+    Tests for Insecure Direct Object Reference (IDOR) prevention.
+    
+    These tests verify that users cannot view or modify data belonging to other users
+    by changing URL parameters. Object-level access control is enforced.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        
+        # Create multiple users for testing
+        self.user1 = User.objects.create_user(
+            'user1',
+            'user1@example.com',
+            'password123'
+        )
+        
+        self.user2 = User.objects.create_user(
+            'user2',
+            'user2@example.com',
+            'password123'
+        )
+        
+        self.superuser = User.objects.create_superuser(
+            'admin',
+            'admin@example.com',
+            'password123'
+        )
+
+    def test_user_can_access_own_profile_by_id(self):
+        """Test that a user can access their own profile via ID URL."""
+        self.client.login(username='user1', password='password123')
+        profile_url = reverse('mucyo_aime_maxime:profile_detail', args=[self.user1.id])
+        response = self.client.get(profile_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'mucyo_aime_maxime/profile.html')
+
+    def test_user_cannot_access_other_user_profile_by_id(self):
+        """Test that a user cannot access another user's profile via ID URL (IDOR prevention)."""
+        self.client.login(username='user1', password='password123')
+        profile_url = reverse('mucyo_aime_maxime:profile_detail', args=[self.user2.id])
+        response = self.client.get(profile_url)
+        # Should return 403 Forbidden
+        self.assertEqual(response.status_code, 403)
+
+    def test_user_cannot_modify_other_user_profile_by_id(self):
+        """Test that a user cannot modify another user's profile via ID URL (IDOR prevention)."""
+        self.client.login(username='user1', password='password123')
+        profile_url = reverse('mucyo_aime_maxime:profile_detail', args=[self.user2.id])
+        data = {
+            'email': 'hacker@example.com',
+            'first_name': 'Hacker',
+            'last_name': 'User',
+        }
+        response = self.client.post(profile_url, data)
+        # Should return 403 Forbidden and not modify user2's data
+        self.assertEqual(response.status_code, 403)
+        self.user2.refresh_from_db()
+        self.assertNotEqual(self.user2.email, 'hacker@example.com')
+
+    def test_unauthenticated_user_cannot_access_profile_by_id(self):
+        """Test that unauthenticated users are redirected when trying to access profile by ID."""
+        profile_url = reverse('mucyo_aime_maxime:profile_detail', args=[self.user1.id])
+        response = self.client.get(profile_url)
+        # Should redirect to login
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/auth/login/', response.url)
+
+    def test_nonexistent_user_id_returns_error(self):
+        """Test that accessing a nonexistent user ID returns appropriate error."""
+        self.client.login(username='user1', password='password123')
+        profile_url = reverse('mucyo_aime_maxime:profile_detail', args=[9999])
+        response = self.client.get(profile_url)
+        # User is authenticated but user ID doesn't exist
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/auth/profile/', response.url)
+
+    def test_superuser_can_access_any_user_profile(self):
+        """Test that superuser can access any user's profile (admin privilege)."""
+        self.client.login(username='admin', password='password123')
+        profile_url = reverse('mucyo_aime_maxime:profile_detail', args=[self.user1.id])
+        response = self.client.get(profile_url)
+        # Superuser should have access
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'mucyo_aime_maxime/profile.html')
+
+    def test_superuser_can_modify_any_user_profile(self):
+        """Test that superuser can modify any user's profile."""
+        self.client.login(username='admin', password='password123')
+        profile_url = reverse('mucyo_aime_maxime:profile_detail', args=[self.user1.id])
+        data = {
+            'email': 'modified@example.com',
+            'first_name': 'Modified',
+            'last_name': 'User',
+        }
+        response = self.client.post(profile_url, data)
+        # Superuser should be able to modify
+        self.assertEqual(response.status_code, 302)
+        self.user1.refresh_from_db()
+        self.assertEqual(self.user1.email, 'modified@example.com')
+
+    def test_user_can_update_own_profile_default_view(self):
+        """Test that user can update their own profile using default profile view."""
+        self.client.login(username='user1', password='password123')
+        profile_url = reverse('mucyo_aime_maxime:profile')
+        data = {
+            'email': 'newemail@example.com',
+            'first_name': 'Updated',
+            'last_name': 'User',
+        }
+        response = self.client.post(profile_url, data)
+        # Should succeed and redirect
+        self.assertEqual(response.status_code, 302)
+        self.user1.refresh_from_db()
+        self.assertEqual(self.user1.email, 'newemail@example.com')
+
+    def test_user_can_change_own_password(self):
+        """Test that user can change their own password."""
+        self.client.login(username='user1', password='password123')
+        password_change_url = reverse('mucyo_aime_maxime:password_change')
+        data = {
+            'old_password': 'password123',
+            'new_password1': 'NewPassword456!',
+            'new_password2': 'NewPassword456!',
+        }
+        response = self.client.post(password_change_url, data)
+        # Should succeed
+        self.assertEqual(response.status_code, 302)
+        self.user1.refresh_from_db()
+        self.assertTrue(self.user1.check_password('NewPassword456!'))
+

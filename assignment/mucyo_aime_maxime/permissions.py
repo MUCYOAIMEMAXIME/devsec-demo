@@ -6,11 +6,15 @@ in the UAS application. Three distinct roles are supported:
 - Anonymous users (no authentication required)
 - Authenticated users (logged in)
 - Staff/privileged users (group membership)
+
+Also includes object-level access control for preventing IDOR vulnerabilities.
 """
 
 from functools import wraps
 from django.shortcuts import redirect
 from django.contrib import messages
+from django.http import HttpResponseForbidden
+from django.contrib.auth.models import User
 
 
 def user_is_authenticated(view_func):
@@ -103,3 +107,43 @@ def check_user_role(user):
         return 'staff'
     
     return 'user'
+
+
+def user_owns_object(view_func):
+    """
+    Object-level access control decorator to prevent IDOR vulnerabilities.
+    
+    Ensures that a user can only access/modify objects that belong to them.
+    The view must accept a 'user_id' parameter and the current user must 
+    either be the owner of that user ID or a superuser.
+    
+    This decorator checks that:
+    - The user is authenticated
+    - The requested user_id exists
+    - The requesting user owns the object (is the same user) or is a superuser
+    
+    Unauthorized access returns a 403 Forbidden response.
+    """
+    @wraps(view_func)
+    def wrapper(request, user_id=None, *args, **kwargs):
+        # Ensure the user is authenticated
+        if not request.user.is_authenticated:
+            messages.warning(request, 'You must log in to access this page.')
+            return redirect('mucyo_aime_maxime:login')
+        
+        # If user_id is provided, check ownership
+        if user_id is not None:
+            # Verify the requested user exists
+            try:
+                target_user = User.objects.get(id=user_id)
+            except User.DoesNotExist:
+                messages.error(request, 'User not found.')
+                return redirect('mucyo_aime_maxime:profile')
+            
+            # Check if current user is the owner or a superuser (IDOR prevention)
+            if request.user.id != user_id and not request.user.is_superuser:
+                messages.error(request, 'You do not have permission to access this resource.')
+                return HttpResponseForbidden('Access Denied: You cannot access other users\' data.')
+        
+        return view_func(request, user_id=user_id, *args, **kwargs)
+    return wrapper

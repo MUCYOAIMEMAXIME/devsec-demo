@@ -9,7 +9,6 @@ in the UAS application. Three distinct roles are supported:
 """
 
 from functools import wraps
-from django.contrib.auth.decorators import user_passes_test
 from django.shortcuts import redirect
 from django.contrib import messages
 

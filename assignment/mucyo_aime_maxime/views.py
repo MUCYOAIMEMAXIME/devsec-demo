@@ -5,7 +5,7 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 from .forms import UserRegistrationForm, UserLoginForm, UserProfileForm, UserPasswordChangeForm
-from .permissions import user_is_authenticated, user_is_staff, user_is_instructor, check_user_role
+from .permissions import user_is_staff, user_is_instructor, check_user_role
 
 
 @require_http_methods(["GET", "POST"])

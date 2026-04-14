@@ -5,7 +5,10 @@ from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
 
 class UserAdmin(BaseUserAdmin):
     """Enhanced User admin for authentication management with role display."""
-    list_display = ('username', 'email', 'first_name', 'last_name', 'get_roles', 'is_active', 'date_joined')
+    list_display = (
+        'username', 'email', 'first_name', 'last_name',
+        'get_roles', 'is_active', 'date_joined'
+    )
     list_filter = ('is_active', 'date_joined', 'groups')
     search_fields = ('username', 'email')
     filter_horizontal = ('groups',)

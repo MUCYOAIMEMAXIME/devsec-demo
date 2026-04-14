@@ -580,3 +580,83 @@ class PasswordResetTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "reset link was invalid")
 
+
+from django.core.cache import cache
+
+class LoginBruteforceTests(TestCase):
+    """
+    Tests for login authentication hardening against brute-force attacks.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.login_url = reverse('mucyo_aime_maxime:login')
+        self.user = User.objects.create_user('bruteuser', 'brute@example.com', 'InitialPass123!')
+        
+        # Clear cache before each test to ensure a clean state
+        cache.clear()
+
+    def test_login_successful_under_limit(self):
+        """Test successful login after a few failed attempts."""
+        # Note: Using views.MAX_LOGIN_ATTEMPTS isn't strictly necessary if hardcoded to 5 based on design
+        for _ in range(3):
+            response = self.client.post(self.login_url, {'username': 'bruteuser', 'password': 'wrongpassword'})
+            self.assertEqual(response.status_code, 200)
+            self.assertContains(response, "Invalid username or password")
+            
+        # 4th attempt is successful
+        response = self.client.post(self.login_url, {'username': 'bruteuser', 'password': 'InitialPass123!'})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.wsgi_request.user.is_authenticated)
+
+    def test_lockout_after_max_attempts(self):
+        """Test that the account is locked out after MAX_LOGIN_ATTEMPTS."""
+        # 5 failed attempts
+        for _ in range(5):
+            response = self.client.post(self.login_url, {'username': 'bruteuser', 'password': 'wrongpassword'})
+            self.assertEqual(response.status_code, 200)
+            
+        # At this point, the account should be locked.
+        # The 5th attempt might also display the lockout message depending on exactly when it's checked,
+        # but let's test the 6th attempt specifically.
+        
+        # 6th attempt (even with correct password) should fail due to lockout
+        response = self.client.post(self.login_url, {'username': 'bruteuser', 'password': 'InitialPass123!'})
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Too many failed attempts. Please try again in 5 minutes.")
+        self.assertFalse(response.wsgi_request.user.is_authenticated)
+
+    def test_counter_resets_on_success(self):
+        """Test that a successful login resets the failed attempt counter."""
+        # 3 failed attempts
+        for _ in range(3):
+            self.client.post(self.login_url, {'username': 'bruteuser', 'password': 'wrongpassword'})
+            
+        # 1 successful attempt
+        self.client.post(self.login_url, {'username': 'bruteuser', 'password': 'InitialPass123!'})
+        self.client.logout()
+        
+        # Now we should safely be able to have 3 more failed attempts without getting locked out.
+        # If the counter did not reset, the 2nd attempt here (5th overall) would trigger a lockout.
+        for _ in range(3):
+            response = self.client.post(self.login_url, {'username': 'bruteuser', 'password': 'wrongpassword'})
+            self.assertContains(response, "Invalid username or password")
+            self.assertNotContains(response, "Too many failed attempts")
+
+    def test_lockout_isolation(self):
+        """Test that a lockout for one user does not affect another user."""
+        other_user = User.objects.create_user('otheruser', 'other@example.com', 'OtherPass123!')
+        
+        # Lock out bruteuser
+        for _ in range(5):
+            self.client.post(self.login_url, {'username': 'bruteuser', 'password': 'wrongpassword'})
+            
+        # Verify bruteuser is locked out
+        response = self.client.post(self.login_url, {'username': 'bruteuser', 'password': 'wrongpassword'})
+        self.assertContains(response, "Too many failed attempts")
+        
+        # Verify otheruser can still login perfectly fine
+        response = self.client.post(self.login_url, {'username': 'otheruser', 'password': 'OtherPass123!'})
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.wsgi_request.user.is_authenticated)
+

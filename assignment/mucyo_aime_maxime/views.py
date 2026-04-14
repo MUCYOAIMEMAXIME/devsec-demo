@@ -5,8 +5,13 @@ from django.contrib.auth.models import User
 from django.contrib import messages
 from django.views.decorators.http import require_http_methods
 from django.http import HttpResponseForbidden
+from django.forms import ValidationError
+from django.core.cache import cache
 from .forms import UserRegistrationForm, UserLoginForm, UserProfileForm, UserPasswordChangeForm
 from .permissions import user_is_staff, user_is_instructor, check_user_role, user_owns_object
+
+MAX_LOGIN_ATTEMPTS = 5
+LOCKOUT_DURATION = 300  # 5 minutes in seconds
 
 
 @require_http_methods(["GET", "POST"])
@@ -43,17 +48,42 @@ def login_view(request):
         if form.is_valid():
             username = form.cleaned_data['username']
             password = form.cleaned_data['password']
+            
+            # Check for existing lockout
+            lockout_key = f"lockout_{username}"
+            if cache.get(lockout_key):
+                messages.error(
+                    request,
+                    'Too many failed attempts. Please try again in 5 minutes.'
+                )
+                return render(request, 'mucyo_aime_maxime/login.html', {'form': form})
+            
             user = authenticate(request, username=username, password=password)
+            attempts_key = f"login_attempts_{username}"
             
             if user is not None:
+                # Clear attempts on successful login
+                cache.delete(attempts_key)
+                
                 login(request, user)
                 messages.success(request, f'Welcome back, {user.username}!')
                 return redirect('mucyo_aime_maxime:profile')
             else:
-                messages.error(
-                    request,
-                    'Invalid username or password. Please try again.'
-                )
+                # Increment failed attempts
+                attempts = cache.get(attempts_key, 0) + 1
+                cache.set(attempts_key, attempts, timeout=LOCKOUT_DURATION)
+                
+                if attempts >= MAX_LOGIN_ATTEMPTS:
+                    cache.set(lockout_key, True, timeout=LOCKOUT_DURATION)
+                    messages.error(
+                        request,
+                        'Too many failed attempts. Please try again in 5 minutes.'
+                    )
+                else:
+                    messages.error(
+                        request,
+                        'Invalid username or password. Please try again.'
+                    )
     else:
         form = UserLoginForm()
     

@@ -587,6 +587,32 @@ class PasswordResetTests(TestCase):
         self.assertContains(response, "reset link was invalid")
 
 
+class CSRFPreventionTests(TestCase):
+    """Tests for Cross-Site Request Forgery (CSRF) protection."""
+
+    def setUp(self):
+        # Client with enforce_csrf=True to test CSRF protection
+        self.csrf_client = Client(enforce_csrf=True)
+        self.login_url = reverse('mucyo_aime_maxime:login')
+
+    def test_post_request_without_csrf_rejected(self):
+        """Test that a POST request without a CSRF token is rejected with 403 Forbidden."""
+        data = {
+            'username': 'testuser',
+            'password': 'testpassword',
+        }
+        # Attempting POST without token
+        response = self.csrf_client.post(self.login_url, data)
+        self.assertEqual(response.status_code, 403)
+
+    def test_logout_requires_post(self):
+        """Test that logout is only possible via POST (already tested but re-verifying)."""
+        logout_url = reverse('mucyo_aime_maxime:logout')
+        response = self.client.get(logout_url)
+        # Should return 405 Method Not Allowed
+        self.assertEqual(response.status_code, 405)
+
+
 from django.core.cache import cache
 
 class LoginBruteforceTests(TestCase):

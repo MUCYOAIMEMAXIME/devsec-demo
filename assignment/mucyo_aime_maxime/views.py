@@ -9,7 +9,8 @@ from django.forms import ValidationError
 from django.core.cache import cache
 from django.utils.http import url_has_allowed_host_and_scheme
 import logging
-from .forms import UserRegistrationForm, UserLoginForm, UserProfileForm, UserPasswordChangeForm
+from .forms import UserRegistrationForm, UserLoginForm, UserProfileForm, UserPasswordChangeForm, UserProfileUploadForm
+from .models import UserProfile
 from .permissions import user_is_staff, user_is_instructor, check_user_role, user_owns_object
 
 # Get security logger
@@ -150,25 +151,29 @@ def logout_view(request):
 def profile_view(request):
     """
     Display and handle user profile updates for the current user.
-    
-    Object-level access control: Users can only view and modify their own profile.
-    This prevents IDOR vulnerabilities by ensuring profile operations are restricted
-    to the authenticated user only.
     """
-    # Explicit access control check: ensure user can only access their own profile
     user = request.user
-    
+    profile, created = UserProfile.objects.get_or_create(user=user)
+
     if request.method == 'POST':
-        form = UserProfileForm(request.POST, instance=user)
-        if form.is_valid():
-            form.save()
-            security_logger.info(f"PROFILE_UPDATE: User '{user.username}' (ID: {user.id}) updated their profile.")
+        user_form = UserProfileForm(request.POST, instance=user)
+        upload_form = UserProfileUploadForm(request.POST, request.FILES, instance=profile)
+
+        if user_form.is_valid() and upload_form.is_valid():
+            user_form.save()
+            upload_form.save()
+            security_logger.info(f"PROFILE_UPDATE: User '{user.username}' (ID: {user.id}) updated their profile and/or uploads.")
             messages.success(request, 'Your profile has been updated successfully.')
             return redirect('mucyo_aime_maxime:profile')
     else:
-        form = UserProfileForm(instance=user)
+        user_form = UserProfileForm(instance=user)
+        upload_form = UserProfileUploadForm(instance=profile)
     
-    return render(request, 'mucyo_aime_maxime/profile.html', {'form': form})
+    return render(request, 'mucyo_aime_maxime/profile.html', {
+        'form': user_form,
+        'upload_form': upload_form,
+        'profile': profile
+    })
 
 
 @login_required(login_url='mucyo_aime_maxime:login')
@@ -177,35 +182,33 @@ def profile_view(request):
 def profile_detail_view(request, user_id=None):
     """
     Display and handle user profile updates by user ID (with IDOR prevention).
-    
-    Object-level access control: Users can only view/modify their own profile.
-    The @user_owns_object decorator ensures that:
-    - The requested user exists
-    - The requesting user is either the target user or a superuser
-    - Unauthorized access returns 403 Forbidden
-    
-    This view demonstrates proper IDOR prevention when accepting user IDs as parameters.
     """
-    # Get the target user (already verified by @user_owns_object decorator)
     try:
         target_user = User.objects.get(id=user_id)
+        target_profile, _ = UserProfile.objects.get_or_create(user=target_user)
     except User.DoesNotExist:
         messages.error(request, 'User not found.')
         return redirect('mucyo_aime_maxime:profile')
     
     if request.method == 'POST':
-        form = UserProfileForm(request.POST, instance=target_user)
-        if form.is_valid():
-            form.save()
+        user_form = UserProfileForm(request.POST, instance=target_user)
+        upload_form = UserProfileUploadForm(request.POST, request.FILES, instance=target_profile)
+
+        if user_form.is_valid() and upload_form.is_valid():
+            user_form.save()
+            upload_form.save()
             security_logger.info(f"PROFILE_DETAIL_UPDATE: User '{request.user.username}' (ID: {request.user.id}) updated profile of '{target_user.username}' (ID: {target_user.id}).")
             messages.success(request, 'Profile has been updated successfully.')
             return redirect('mucyo_aime_maxime:profile_detail', user_id=user_id)
     else:
-        form = UserProfileForm(instance=target_user)
+        user_form = UserProfileForm(instance=target_user)
+        upload_form = UserProfileUploadForm(instance=target_profile)
     
     context = {
-        'form': form,
+        'form': user_form,
+        'upload_form': upload_form,
         'target_user': target_user,
+        'profile': target_profile,
         'is_own_profile': request.user.id == target_user.id,
     }
     return render(request, 'mucyo_aime_maxime/profile.html', context)

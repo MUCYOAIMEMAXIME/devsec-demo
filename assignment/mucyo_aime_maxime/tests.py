@@ -6,6 +6,80 @@ import os
 import logging
 
 
+from .models import UserProfile
+from django.core.files.uploadedfile import SimpleUploadedFile
+
+class FileUploadSecurityTests(TestCase):
+    """Tests for secure file upload handling."""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user('fileuser', 'file@example.com', 'testpass123')
+        self.profile, _ = UserProfile.objects.get_or_create(user=self.user)
+        self.profile_url = reverse('mucyo_aime_maxime:profile')
+
+    def test_upload_valid_image(self):
+        """Test uploading a valid image file."""
+        self.client.login(username='fileuser', password='testpass123')
+        # Use a real small GIF
+        image_content = (
+            b'\x47\x49\x46\x38\x39\x61\x01\x00\x01\x00\x80\x00\x00\xff\xff\xff'
+            b'\x00\x00\x00\x21\xf9\x04\x01\x00\x00\x00\x00\x2c\x00\x00\x00\x00'
+            b'\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00\x3b'
+        )
+        avatar = SimpleUploadedFile("test.gif", image_content, content_type="image/gif")
+
+        data = {
+            'email': 'file@example.com',
+            'avatar': avatar
+        }
+        response = self.client.post(self.profile_url, data)
+        self.assertEqual(response.status_code, 302)
+        self.profile.refresh_from_db()
+        self.assertTrue(self.profile.avatar.name.endswith('.gif'))
+
+    def test_reject_invalid_extension(self):
+        """Test that files with dangerous extensions are rejected."""
+        self.client.login(username='fileuser', password='testpass123')
+        # Uploading to 'document' field which uses validate_is_document
+        bad_file = SimpleUploadedFile("malicious.exe", b"executable content", content_type="application/x-msdownload")
+
+        data = {
+            'email': 'file@example.com',
+            'document': bad_file
+        }
+        response = self.client.post(self.profile_url, data)
+        # Should stay on page and show error
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Unsupported file extension")
+
+    def test_file_size_limit(self):
+        """Test that files exceeding the size limit are rejected."""
+        self.client.login(username='fileuser', password='testpass123')
+        large_file = SimpleUploadedFile("large.pdf", b"0" * (6 * 1024 * 1024), content_type="application/pdf")
+
+        data = {
+            'email': 'file@example.com',
+            'document': large_file
+        }
+        response = self.client.post(self.profile_url, data)
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "maximum file size that can be uploaded is 5MB")
+
+    def test_upload_valid_document(self):
+        """Test uploading a valid document file."""
+        self.client.login(username='fileuser', password='testpass123')
+        doc = SimpleUploadedFile("test.pdf", b"PDF content", content_type="application/pdf")
+
+        data = {
+            'email': 'file@example.com',
+            'document': doc
+        }
+        response = self.client.post(self.profile_url, data)
+        self.assertEqual(response.status_code, 302)
+        self.profile.refresh_from_db()
+        self.assertTrue(self.profile.document.name.endswith('.pdf'))
+
 class XSSPreventionTests(TestCase):
     """Tests for Stored Cross-Site Scripting (XSS) prevention."""
 

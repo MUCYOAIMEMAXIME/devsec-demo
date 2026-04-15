@@ -59,8 +59,10 @@ class UserLoginForm(forms.Form):
     )
 
 
+from .models import UserProfile
+
 class UserProfileForm(forms.ModelForm):
-    """Form for user profile information."""
+    """Form for user profile information including avatar and document."""
     email = forms.EmailField(
         widget=forms.EmailInput(attrs={'class': 'form-control'})
     )
@@ -78,6 +80,16 @@ class UserProfileForm(forms.ModelForm):
     class Meta:
         model = User
         fields = ('email', 'first_name', 'last_name')
+
+class UserProfileUploadForm(forms.ModelForm):
+    """Form for handling avatar and document uploads."""
+    class Meta:
+        model = UserProfile
+        fields = ('avatar', 'document')
+        widgets = {
+            'avatar': forms.FileInput(attrs={'class': 'form-control'}),
+            'document': forms.FileInput(attrs={'class': 'form-control'}),
+        }
 
 
 class UserPasswordChangeForm(PasswordChangeForm):

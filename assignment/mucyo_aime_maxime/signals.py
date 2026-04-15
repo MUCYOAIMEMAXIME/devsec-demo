@@ -6,6 +6,13 @@ from django.db.models.signals import post_save, m2m_changed
 
 security_logger = logging.getLogger('security_audit')
 
+from .models import UserProfile
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.get_or_create(user=instance)
+
 @receiver(user_login_failed)
 def log_user_login_failed(sender, credentials, request, **kwargs):
     username = credentials.get('username', 'unknown')

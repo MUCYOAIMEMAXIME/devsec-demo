@@ -7,6 +7,8 @@ class MucyoAimeMaximeConfig(AppConfig):
     
     def ready(self):
         """Initialize default groups and signals on app startup."""
-        from .admin import create_default_groups
+        import sys
+        if 'manage.py' in sys.argv and ('runserver' in sys.argv or 'migrate' in sys.argv):
+            from .admin import create_default_groups
+            create_default_groups()
         from . import signals  # Import signals to register receivers
-        create_default_groups()

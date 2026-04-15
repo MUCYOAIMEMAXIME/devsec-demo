@@ -180,7 +180,10 @@
                     <a href="{% url 'mucyo_aime_maxime:instructor_reports' %}" style="color: #e74c3c;">Reports</a>
                 {% endif %}
                 
-                <a href="{% url 'mucyo_aime_maxime:logout' %}">Logout</a>
+                <form method="post" action="{% url 'mucyo_aime_maxime:logout' %}" style="display: inline;">
+                    {% csrf_token %}
+                    <button type="submit" style="background: none; border: none; color: white; text-decoration: none; cursor: pointer; font: inherit;">Logout</button>
+                </form>
             {% else %}
                 <a href="{% url 'mucyo_aime_maxime:register' %}">Register</a>
                 <a href="{% url 'mucyo_aime_maxime:login' %}">Login</a>

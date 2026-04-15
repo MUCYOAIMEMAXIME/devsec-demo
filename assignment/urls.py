@@ -21,5 +21,5 @@ from django.views.generic.base import RedirectView
 urlpatterns = [
     path('', RedirectView.as_view(url='auth/login/', permanent=False)),
     path('admin/', admin.site.urls),
-    path('auth/', include('assignment.mucyo_aime_maxime.urls')),
+    path('auth/', include('mucyo_aime_maxime.urls')),
 ]

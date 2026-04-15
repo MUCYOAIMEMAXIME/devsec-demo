@@ -41,7 +41,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'assignment.mucyo_aime_maxime',
+    'mucyo_aime_maxime',
 ]
 
 MIDDLEWARE = [
@@ -54,7 +54,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'assignment.urls'
+ROOT_URLCONF = 'urls'
 
 TEMPLATES = [
     {

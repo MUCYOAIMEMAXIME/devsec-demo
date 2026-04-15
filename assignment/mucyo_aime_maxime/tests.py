@@ -117,8 +117,14 @@ class UserLogoutTests(TestCase):
 
     def test_logout_requires_login(self):
         """Test that logout requires authentication."""
-        response = self.client.get(self.logout_url)
+        response = self.client.post(self.logout_url)
         self.assertEqual(response.status_code, 302)
+
+    def test_logout_get_not_allowed(self):
+        """Test that logout does not allow GET requests."""
+        self.client.login(username='testuser', password='testpass123')
+        response = self.client.get(self.logout_url)
+        self.assertEqual(response.status_code, 405)
 
     def test_user_logout_success(self):
         """Test successful user logout."""

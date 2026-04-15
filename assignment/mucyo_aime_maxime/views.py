@@ -91,7 +91,7 @@ def login_view(request):
 
 
 @login_required(login_url='mucyo_aime_maxime:login')
-@require_http_methods(["GET", "POST"])
+@require_http_methods(["POST"])
 def logout_view(request):
     """Handle user logout."""
     logout(request)

@@ -6,6 +6,7 @@ class MucyoAimeMaximeConfig(AppConfig):
     verbose_name = 'UAS - User Authentication Service'
     
     def ready(self):
-        """Initialize default groups on app startup."""
+        """Initialize default groups and signals on app startup."""
         from .admin import create_default_groups
+        from . import signals  # Import signals to register receivers
         create_default_groups()

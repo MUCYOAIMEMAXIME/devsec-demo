@@ -123,3 +123,43 @@ STATIC_URL = 'static/'
 
 # Email settings for development
 EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+# Logging configuration for security audit events
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
+            'style': '{',
+        },
+        'security': {
+            'format': '%(asctime)s [SECURITY_AUDIT] %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+        'security_file': {
+            'level': 'INFO',
+            'class': 'logging.FileHandler',
+            'filename': os.path.join(BASE_DIR, 'security_audit.log'),
+            'formatter': 'security',
+        },
+    },
+    'loggers': {
+        'django.security': {
+            'handlers': ['security_file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+        'security_audit': {
+            'handlers': ['security_file', 'console'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+    },
+}

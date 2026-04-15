@@ -1,6 +1,9 @@
 from django.test import TestCase, Client
 from django.contrib.auth.models import User, Group
 from django.urls import reverse
+from django.conf import settings
+import os
+import logging
 
 
 class UserRegistrationTests(TestCase):
@@ -90,6 +93,80 @@ class UserLoginTests(TestCase):
         response = self.client.post(self.login_url, data)
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.wsgi_request.user.is_authenticated)
+
+
+class AuditLoggingTests(TestCase):
+    """
+    Tests for security audit logging.
+    Verifies that security-relevant events are logged to the audit file.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.login_url = reverse('mucyo_aime_maxime:login')
+        self.user = User.objects.create_user('audituser', 'audit@example.com', 'testpass123')
+        self.log_file = os.path.join(settings.BASE_DIR, 'security_audit.log')
+
+        # Clear log file before each test if it exists
+        if os.path.exists(self.log_file):
+            open(self.log_file, 'w').close()
+
+    def _get_log_content(self):
+        if not os.path.exists(self.log_file):
+            # Try to force loggers to flush if possible, though FileHandler usually writes immediately
+            return ""
+        with open(self.log_file, 'r') as f:
+            return f.read()
+
+    def test_login_success_logging(self):
+        """Test that successful login is logged."""
+        self.client.post(self.login_url, {
+            'username': 'audituser',
+            'password': 'testpass123'
+        })
+        log_content = self._get_log_content()
+        self.assertIn("LOGIN_SUCCESS", log_content)
+        self.assertIn("audituser", log_content)
+        self.assertNotIn("testpass123", log_content) # Ensure password is not logged
+
+    def test_login_failure_logging(self):
+        """Test that failed login is logged."""
+        self.client.post(self.login_url, {
+            'username': 'audituser',
+            'password': 'wrongpassword'
+        })
+        log_content = self._get_log_content()
+        self.assertIn("LOGIN_FAILURE", log_content)
+        self.assertIn("audituser", log_content)
+
+    def test_logout_logging(self):
+        """Test that logout is logged."""
+        self.client.login(username='audituser', password='testpass123')
+        self.client.post(reverse('mucyo_aime_maxime:logout'))
+        log_content = self._get_log_content()
+        self.assertIn("LOGOUT", log_content)
+        self.assertIn("audituser", log_content)
+
+    def test_registration_logging(self):
+        """Test that user registration is logged."""
+        data = {
+            'username': 'newaudituser',
+            'email': 'newaudit@example.com',
+            'password1': 'NewPass123!',
+            'password2': 'NewPass123!',
+        }
+        self.client.post(reverse('mucyo_aime_maxime:register'), data)
+        log_content = self._get_log_content()
+        self.assertIn("USER_REGISTRATION_SUCCESS", log_content)
+        self.assertIn("newaudituser", log_content)
+
+    def test_privilege_change_logging(self):
+        """Test that group membership changes are logged."""
+        staff_group, _ = Group.objects.get_or_create(name='Staff')
+        self.user.groups.add(staff_group)
+        log_content = self._get_log_content()
+        self.assertIn("USER_GROUP_CHANGE", log_content)
+        self.assertIn("audituser", log_content)
 
     def test_user_login_invalid_credentials(self):
         """Test login with invalid credentials."""
@@ -711,6 +788,80 @@ class LoginBruteforceTests(TestCase):
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.wsgi_request.user.is_authenticated)
 
+
+class AuditLoggingTests(TestCase):
+    """
+    Tests for security audit logging.
+    Verifies that security-relevant events are logged to the audit file.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.login_url = reverse('mucyo_aime_maxime:login')
+        self.user = User.objects.create_user('audituser', 'audit@example.com', 'testpass123')
+        self.log_file = os.path.join(settings.BASE_DIR, 'security_audit.log')
+
+        # Clear log file before each test if it exists
+        if os.path.exists(self.log_file):
+            open(self.log_file, 'w').close()
+
+    def _get_log_content(self):
+        if not os.path.exists(self.log_file):
+            # Try to force loggers to flush if possible, though FileHandler usually writes immediately
+            return ""
+        with open(self.log_file, 'r') as f:
+            return f.read()
+
+    def test_login_success_logging(self):
+        """Test that successful login is logged."""
+        self.client.post(self.login_url, {
+            'username': 'audituser',
+            'password': 'testpass123'
+        })
+        log_content = self._get_log_content()
+        self.assertIn("LOGIN_SUCCESS", log_content)
+        self.assertIn("audituser", log_content)
+        self.assertNotIn("testpass123", log_content) # Ensure password is not logged
+
+    def test_login_failure_logging(self):
+        """Test that failed login is logged."""
+        self.client.post(self.login_url, {
+            'username': 'audituser',
+            'password': 'wrongpassword'
+        })
+        log_content = self._get_log_content()
+        self.assertIn("LOGIN_FAILURE", log_content)
+        self.assertIn("audituser", log_content)
+
+    def test_logout_logging(self):
+        """Test that logout is logged."""
+        self.client.login(username='audituser', password='testpass123')
+        self.client.post(reverse('mucyo_aime_maxime:logout'))
+        log_content = self._get_log_content()
+        self.assertIn("LOGOUT", log_content)
+        self.assertIn("audituser", log_content)
+
+    def test_registration_logging(self):
+        """Test that user registration is logged."""
+        data = {
+            'username': 'newaudituser',
+            'email': 'newaudit@example.com',
+            'password1': 'NewPass123!',
+            'password2': 'NewPass123!',
+        }
+        self.client.post(reverse('mucyo_aime_maxime:register'), data)
+        log_content = self._get_log_content()
+        self.assertIn("USER_REGISTRATION_SUCCESS", log_content)
+        self.assertIn("newaudituser", log_content)
+
+    def test_privilege_change_logging(self):
+        """Test that group membership changes are logged."""
+        staff_group, _ = Group.objects.get_or_create(name='Staff')
+        self.user.groups.add(staff_group)
+        log_content = self._get_log_content()
+        self.assertIn("USER_GROUP_CHANGE", log_content)
+        self.assertIn("audituser", log_content)
+
     def test_lockout_after_max_attempts(self):
         """Test that the account is locked out after MAX_LOGIN_ATTEMPTS."""
         # 5 failed attempts
@@ -761,4 +912,78 @@ class LoginBruteforceTests(TestCase):
         response = self.client.post(self.login_url, {'username': 'otheruser', 'password': 'OtherPass123!'})
         self.assertEqual(response.status_code, 302)
         self.assertTrue(response.wsgi_request.user.is_authenticated)
+
+
+class AuditLoggingTests(TestCase):
+    """
+    Tests for security audit logging.
+    Verifies that security-relevant events are logged to the audit file.
+    """
+
+    def setUp(self):
+        self.client = Client()
+        self.login_url = reverse('mucyo_aime_maxime:login')
+        self.user = User.objects.create_user('audituser', 'audit@example.com', 'testpass123')
+        self.log_file = os.path.join(settings.BASE_DIR, 'security_audit.log')
+
+        # Clear log file before each test if it exists
+        if os.path.exists(self.log_file):
+            open(self.log_file, 'w').close()
+
+    def _get_log_content(self):
+        if not os.path.exists(self.log_file):
+            # Try to force loggers to flush if possible, though FileHandler usually writes immediately
+            return ""
+        with open(self.log_file, 'r') as f:
+            return f.read()
+
+    def test_login_success_logging(self):
+        """Test that successful login is logged."""
+        self.client.post(self.login_url, {
+            'username': 'audituser',
+            'password': 'testpass123'
+        })
+        log_content = self._get_log_content()
+        self.assertIn("LOGIN_SUCCESS", log_content)
+        self.assertIn("audituser", log_content)
+        self.assertNotIn("testpass123", log_content) # Ensure password is not logged
+
+    def test_login_failure_logging(self):
+        """Test that failed login is logged."""
+        self.client.post(self.login_url, {
+            'username': 'audituser',
+            'password': 'wrongpassword'
+        })
+        log_content = self._get_log_content()
+        self.assertIn("LOGIN_FAILURE", log_content)
+        self.assertIn("audituser", log_content)
+
+    def test_logout_logging(self):
+        """Test that logout is logged."""
+        self.client.login(username='audituser', password='testpass123')
+        self.client.post(reverse('mucyo_aime_maxime:logout'))
+        log_content = self._get_log_content()
+        self.assertIn("LOGOUT", log_content)
+        self.assertIn("audituser", log_content)
+
+    def test_registration_logging(self):
+        """Test that user registration is logged."""
+        data = {
+            'username': 'newaudituser',
+            'email': 'newaudit@example.com',
+            'password1': 'NewPass123!',
+            'password2': 'NewPass123!',
+        }
+        self.client.post(reverse('mucyo_aime_maxime:register'), data)
+        log_content = self._get_log_content()
+        self.assertIn("USER_REGISTRATION_SUCCESS", log_content)
+        self.assertIn("newaudituser", log_content)
+
+    def test_privilege_change_logging(self):
+        """Test that group membership changes are logged."""
+        staff_group, _ = Group.objects.get_or_create(name='Staff')
+        self.user.groups.add(staff_group)
+        log_content = self._get_log_content()
+        self.assertIn("USER_GROUP_CHANGE", log_content)
+        self.assertIn("audituser", log_content)
 

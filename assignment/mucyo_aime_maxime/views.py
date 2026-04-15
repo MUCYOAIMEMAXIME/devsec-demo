@@ -8,8 +8,12 @@ from django.http import HttpResponseForbidden
 from django.forms import ValidationError
 from django.core.cache import cache
 from django.utils.http import url_has_allowed_host_and_scheme
+import logging
 from .forms import UserRegistrationForm, UserLoginForm, UserProfileForm, UserPasswordChangeForm
 from .permissions import user_is_staff, user_is_instructor, check_user_role, user_owns_object
+
+# Get security logger
+security_logger = logging.getLogger('security_audit')
 
 MAX_LOGIN_ATTEMPTS = 5
 LOCKOUT_DURATION = 300  # 5 minutes in seconds
@@ -25,6 +29,7 @@ def register_view(request):
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
             user = form.save()
+            security_logger.info(f"USER_REGISTRATION_SUCCESS: User '{user.username}' (ID: {user.id}) registered from IP {request.META.get('REMOTE_ADDR')}")
             messages.success(
                 request,
                 f'Account created successfully! Welcome, {user.username}.'
@@ -67,6 +72,7 @@ def login_view(request):
             # Check for existing lockout
             lockout_key = f"lockout_{username}"
             if cache.get(lockout_key):
+                security_logger.warning(f"LOGIN_LOCKOUT_ENFORCED: Account '{username}' from IP {request.META.get('REMOTE_ADDR')}")
                 messages.error(
                     request,
                     'Too many failed attempts. Please try again in 5 minutes.'
@@ -81,6 +87,7 @@ def login_view(request):
                 cache.delete(attempts_key)
                 
                 login(request, user)
+                security_logger.info(f"LOGIN_SUCCESS: User '{user.username}' (ID: {user.id}) logged in from IP {request.META.get('REMOTE_ADDR')}")
                 messages.success(request, f'Welcome back, {user.username}!')
 
                 # Validate next_url to prevent open redirects
@@ -98,11 +105,13 @@ def login_view(request):
                 
                 if attempts >= MAX_LOGIN_ATTEMPTS:
                     cache.set(lockout_key, True, timeout=LOCKOUT_DURATION)
+                    security_logger.warning(f"LOGIN_LOCKOUT_TRIGGERED: Account '{username}' reached max attempts from IP {request.META.get('REMOTE_ADDR')}")
                     messages.error(
                         request,
                         'Too many failed attempts. Please try again in 5 minutes.'
                     )
                 else:
+                    security_logger.info(f"LOGIN_FAILURE: Invalid attempt for account '{username}' (Attempt {attempts}/{MAX_LOGIN_ATTEMPTS}) from IP {request.META.get('REMOTE_ADDR')}")
                     messages.error(
                         request,
                         'Invalid username or password. Please try again.'
@@ -120,7 +129,10 @@ def logout_view(request):
     # Get redirect target
     next_url = request.GET.get('next', 'mucyo_aime_maxime:login')
 
+    username = request.user.username
+    user_id = request.user.id
     logout(request)
+    security_logger.info(f"LOGOUT: User '{username}' (ID: {user_id}) logged out.")
     messages.success(request, 'You have been logged out successfully.')
 
     # Validate next_url to prevent open redirects
@@ -150,6 +162,7 @@ def profile_view(request):
         form = UserProfileForm(request.POST, instance=user)
         if form.is_valid():
             form.save()
+            security_logger.info(f"PROFILE_UPDATE: User '{user.username}' (ID: {user.id}) updated their profile.")
             messages.success(request, 'Your profile has been updated successfully.')
             return redirect('mucyo_aime_maxime:profile')
     else:
@@ -184,6 +197,7 @@ def profile_detail_view(request, user_id=None):
         form = UserProfileForm(request.POST, instance=target_user)
         if form.is_valid():
             form.save()
+            security_logger.info(f"PROFILE_DETAIL_UPDATE: User '{request.user.username}' (ID: {request.user.id}) updated profile of '{target_user.username}' (ID: {target_user.id}).")
             messages.success(request, 'Profile has been updated successfully.')
             return redirect('mucyo_aime_maxime:profile_detail', user_id=user_id)
     else:
@@ -214,11 +228,14 @@ def password_change_view(request):
         form = UserPasswordChangeForm(user, request.POST)
         if form.is_valid():
             form.save()
+            security_logger.info(f"PASSWORD_CHANGE_SUCCESS: User '{user.username}' (ID: {user.id}) changed their password.")
             messages.success(
                 request,
                 'Your password has been changed successfully.'
             )
             return redirect('mucyo_aime_maxime:profile')
+        else:
+            security_logger.warning(f"PASSWORD_CHANGE_FAILURE: User '{user.username}' (ID: {user.id}) failed to change password.")
     else:
         form = UserPasswordChangeForm(user)
     

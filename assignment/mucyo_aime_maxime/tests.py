@@ -6,6 +6,84 @@ import os
 import logging
 
 
+class XSSPreventionTests(TestCase):
+    """Tests for Stored Cross-Site Scripting (XSS) prevention."""
+
+    def setUp(self):
+        self.client = Client()
+        self.user = User.objects.create_user(
+            'xssuser',
+            'xss@example.com',
+            'testpass123'
+        )
+        self.staff_user = User.objects.create_user(
+            'staffxss',
+            'staff@example.com',
+            'testpass123',
+            is_staff=True
+        )
+        self.instructor_user = User.objects.create_user(
+            'instxss',
+            'inst@example.com',
+            'testpass123'
+        )
+        # Setup groups
+        staff_group, _ = Group.objects.get_or_create(name='Staff')
+        inst_group, _ = Group.objects.get_or_create(name='Instructor')
+        self.staff_user.groups.add(staff_group)
+        self.instructor_user.groups.add(inst_group)
+
+        # Malicious payload
+        self.xss_payload = "<script>alert('XSS')</script>"
+        self.escaped_payload = "&lt;script&gt;alert(&#x27;XSS&#x27;)&lt;/script&gt;"
+
+    def test_profile_xss_escaped(self):
+        """Test that XSS in profile fields is escaped when rendered."""
+        self.client.login(username='xssuser', password='testpass123')
+
+        # Update profile with XSS payload
+        profile_url = reverse('mucyo_aime_maxime:profile')
+        data = {
+            'first_name': self.xss_payload,
+            'last_name': 'Normal',
+            'email': 'xss@example.com'
+        }
+        self.client.post(profile_url, data)
+
+        # Check rendered profile page
+        response = self.client.get(profile_url)
+        self.assertContains(response, self.escaped_payload)
+        self.assertNotContains(response, self.xss_payload, html=False)
+
+    def test_staff_dashboard_xss_escaped(self):
+        """Test that XSS in user names is escaped in staff dashboard."""
+        # Create a user with XSS payload in name
+        User.objects.create_user(
+            'victim',
+            'victim@example.com',
+            'pass',
+            first_name=self.xss_payload
+        )
+
+        self.client.login(username='staffxss', password='testpass123')
+        response = self.client.get(reverse('mucyo_aime_maxime:staff_dashboard'))
+        self.assertContains(response, self.escaped_payload)
+
+    def test_instructor_reports_xss_escaped(self):
+        """Test that XSS in user names is escaped in instructor reports."""
+        # Create a user with XSS payload in name
+        User.objects.create_user(
+            'victim2',
+            'victim2@example.com',
+            'pass',
+            last_name=self.xss_payload
+        )
+
+        self.client.login(username='instxss', password='testpass123')
+        response = self.client.get(reverse('mucyo_aime_maxime:instructor_reports'))
+        self.assertContains(response, self.escaped_payload)
+
+
 class UserRegistrationTests(TestCase):
     """Tests for user registration functionality."""
 
@@ -628,7 +706,11 @@ class PasswordResetTests(TestCase):
         confirm_url = reverse('mucyo_aime_maxime:password_reset_confirm', 
                              kwargs={'uidb64': uid, 'token': token})
         
+        # Django's built-in PasswordResetConfirmView handles token validation
+        # and displays the form if valid.
         response = self.client.get(confirm_url)
+        # If the view redirects (302), it might be because the token is considered invalid
+        # or already used in this test context.
         self.assertEqual(response.status_code, 200)
         self.assertTemplateUsed(response, 'mucyo_aime_maxime/password_reset_confirm.html')
 
@@ -645,7 +727,7 @@ class PasswordResetTests(TestCase):
         }
         response = self.client.post(confirm_url, data)
         self.assertEqual(response.status_code, 302)
-        self.assertIn('/password-reset-complete/', response.url)
+        self.assertIn('/auth/password-reset-complete/', response.url)
         
         # Verify password is changed
         self.user.refresh_from_db()

@@ -9,7 +9,7 @@ security_logger = logging.getLogger('security_audit')
 @receiver(user_login_failed)
 def log_user_login_failed(sender, credentials, request, **kwargs):
     username = credentials.get('username', 'unknown')
-    ip = request.META.get('REMOTE_ADDR')
+    ip = request.META.get('REMOTE_ADDR') if request is not None else 'unknown'
     security_logger.warning(f"AUTH_SIGNAL_LOGIN_FAILED: Attempt for account '{username}' from IP {ip}")
 
 @receiver(post_save, sender=User)

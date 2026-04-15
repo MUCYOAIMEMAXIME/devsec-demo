@@ -52,8 +52,8 @@
                                                 {{ user.username }}
                                             </a>
                                         </td>
-                                        <td>{{ user.email }}</td>
-                                        <td>{{ user.first_name }} {{ user.last_name }}</td>
+                                        <td>{{ user.email|escape }}</td>
+                                        <td>{{ user.first_name|escape }} {{ user.last_name|escape }}</td>
                                         <td>
                                             {% if user.is_superuser %}
                                                 <span class="badge bg-danger">Admin</span>

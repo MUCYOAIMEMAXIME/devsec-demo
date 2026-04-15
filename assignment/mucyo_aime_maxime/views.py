@@ -7,6 +7,7 @@ from django.views.decorators.http import require_http_methods
 from django.http import HttpResponseForbidden
 from django.forms import ValidationError
 from django.core.cache import cache
+from django.utils.http import url_has_allowed_host_and_scheme
 from .forms import UserRegistrationForm, UserLoginForm, UserProfileForm, UserPasswordChangeForm
 from .permissions import user_is_staff, user_is_instructor, check_user_role, user_owns_object
 
@@ -17,6 +18,9 @@ LOCKOUT_DURATION = 300  # 5 minutes in seconds
 @require_http_methods(["GET", "POST"])
 def register_view(request):
     """Handle user registration."""
+    # Get redirect target
+    next_url = request.GET.get('next', 'mucyo_aime_maxime:profile')
+
     if request.method == 'POST':
         form = UserRegistrationForm(request.POST)
         if form.is_valid():
@@ -26,6 +30,14 @@ def register_view(request):
                 f'Account created successfully! Welcome, {user.username}.'
             )
             login(request, user)
+
+            # Validate next_url to prevent open redirects
+            if next_url and url_has_allowed_host_and_scheme(
+                url=next_url,
+                allowed_hosts={request.get_host()},
+                require_https=request.is_secure()
+            ):
+                return redirect(next_url)
             return redirect('mucyo_aime_maxime:profile')
         else:
             for field, errors in form.errors.items():
@@ -34,12 +46,15 @@ def register_view(request):
     else:
         form = UserRegistrationForm()
     
-    return render(request, 'mucyo_aime_maxime/register.html', {'form': form})
+    return render(request, 'mucyo_aime_maxime/register.html', {'form': form, 'next': next_url})
 
 
 @require_http_methods(["GET", "POST"])
 def login_view(request):
     """Handle user login."""
+    # Get redirect target
+    next_url = request.GET.get('next', 'mucyo_aime_maxime:profile')
+
     if request.user.is_authenticated:
         return redirect('mucyo_aime_maxime:profile')
     
@@ -56,7 +71,7 @@ def login_view(request):
                     request,
                     'Too many failed attempts. Please try again in 5 minutes.'
                 )
-                return render(request, 'mucyo_aime_maxime/login.html', {'form': form})
+                return render(request, 'mucyo_aime_maxime/login.html', {'form': form, 'next': next_url})
             
             user = authenticate(request, username=username, password=password)
             attempts_key = f"login_attempts_{username}"
@@ -67,6 +82,14 @@ def login_view(request):
                 
                 login(request, user)
                 messages.success(request, f'Welcome back, {user.username}!')
+
+                # Validate next_url to prevent open redirects
+                if next_url and url_has_allowed_host_and_scheme(
+                    url=next_url,
+                    allowed_hosts={request.get_host()},
+                    require_https=request.is_secure()
+                ):
+                    return redirect(next_url)
                 return redirect('mucyo_aime_maxime:profile')
             else:
                 # Increment failed attempts
@@ -87,15 +110,26 @@ def login_view(request):
     else:
         form = UserLoginForm()
     
-    return render(request, 'mucyo_aime_maxime/login.html', {'form': form})
+    return render(request, 'mucyo_aime_maxime/login.html', {'form': form, 'next': next_url})
 
 
 @login_required(login_url='mucyo_aime_maxime:login')
 @require_http_methods(["POST"])
 def logout_view(request):
     """Handle user logout."""
+    # Get redirect target
+    next_url = request.GET.get('next', 'mucyo_aime_maxime:login')
+
     logout(request)
     messages.success(request, 'You have been logged out successfully.')
+
+    # Validate next_url to prevent open redirects
+    if next_url and url_has_allowed_host_and_scheme(
+        url=next_url,
+        allowed_hosts={request.get_host()},
+        require_https=request.is_secure()
+    ):
+        return redirect(next_url)
     return redirect('mucyo_aime_maxime:login')
 
 

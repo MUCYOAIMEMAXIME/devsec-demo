@@ -613,6 +613,76 @@ class CSRFPreventionTests(TestCase):
         self.assertEqual(response.status_code, 405)
 
 
+class OpenRedirectTests(TestCase):
+    """Tests for Open Redirect vulnerability prevention."""
+
+    def setUp(self):
+        self.client = Client()
+        self.login_url = reverse('mucyo_aime_maxime:login')
+        self.logout_url = reverse('mucyo_aime_maxime:logout')
+        self.register_url = reverse('mucyo_aime_maxime:register')
+        self.user = User.objects.create_user('redirectuser', 'redir@example.com', 'testpass123')
+
+    def test_login_safe_redirect(self):
+        """Test that login redirects to a safe internal URL."""
+        safe_url = '/auth/profile/'
+        response = self.client.post(f"{self.login_url}?next={safe_url}", {
+            'username': 'redirectuser',
+            'password': 'testpass123'
+        })
+        self.assertRedirects(response, safe_url)
+
+    def test_login_unsafe_redirect(self):
+        """Test that login rejects an unsafe external redirect and uses default."""
+        unsafe_url = 'http://malicious-site.com'
+        response = self.client.post(f"{self.login_url}?next={unsafe_url}", {
+            'username': 'redirectuser',
+            'password': 'testpass123'
+        })
+        # Should redirect to default profile instead of malicious site
+        self.assertRedirects(response, reverse('mucyo_aime_maxime:profile'))
+
+    def test_logout_safe_redirect(self):
+        """Test that logout redirects to a safe internal URL."""
+        self.client.login(username='redirectuser', password='testpass123')
+        safe_url = reverse('mucyo_aime_maxime:login')
+        response = self.client.post(f"{self.logout_url}?next={safe_url}")
+        self.assertRedirects(response, safe_url)
+
+    def test_logout_unsafe_redirect(self):
+        """Test that logout rejects an unsafe external redirect."""
+        self.client.login(username='redirectuser', password='testpass123')
+        unsafe_url = 'http://malicious-site.com'
+        response = self.client.post(f"{self.logout_url}?next={unsafe_url}")
+        # Should redirect to default login
+        self.assertRedirects(response, reverse('mucyo_aime_maxime:login'))
+
+    def test_register_safe_redirect(self):
+        """Test that registration redirects to a safe internal URL."""
+        safe_url = '/auth/profile/'
+        data = {
+            'username': 'newuser',
+            'email': 'new@example.com',
+            'password1': 'NewPass123!',
+            'password2': 'NewPass123!',
+        }
+        response = self.client.post(f"{self.register_url}?next={safe_url}", data)
+        self.assertRedirects(response, safe_url)
+
+    def test_register_unsafe_redirect(self):
+        """Test that registration rejects an unsafe external redirect."""
+        unsafe_url = 'http://malicious-site.com'
+        data = {
+            'username': 'newuser2',
+            'email': 'new2@example.com',
+            'password1': 'NewPass123!',
+            'password2': 'NewPass123!',
+        }
+        response = self.client.post(f"{self.register_url}?next={unsafe_url}", data)
+        # Should redirect to default profile
+        self.assertRedirects(response, reverse('mucyo_aime_maxime:profile'))
+
+
 from django.core.cache import cache
 
 class LoginBruteforceTests(TestCase):

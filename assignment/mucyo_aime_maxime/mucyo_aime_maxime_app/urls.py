@@ -28,7 +28,7 @@ urlpatterns = [
     path('password-reset-confirm/<uidb64>/<token>/', 
          auth_views.PasswordResetConfirmView.as_view(
              template_name='mucyo_aime_maxime/password_reset_confirm.html',
-             success_url='/auth/password-reset-complete/'
+             success_url='mucyo_aime_maxime:password_reset_complete'
          ), 
          name='password_reset_confirm'),
     path('password-reset-complete/', 

@@ -23,7 +23,7 @@ from django.conf.urls.static import static
 urlpatterns = [
     path('', RedirectView.as_view(url='auth/login/', permanent=False)),
     path('admin/', admin.site.urls),
-    path('auth/', include('mucyo_aime_maxime.urls')),
+    path('auth/', include('mucyo_aime_maxime_app.urls')),
 ]
 
 if settings.DEBUG:

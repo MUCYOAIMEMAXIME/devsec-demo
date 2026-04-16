@@ -2,6 +2,10 @@ from django.test import TestCase, Client
 from django.contrib.auth.models import User, Group
 from django.urls import reverse
 from django.conf import settings
+from django.utils.http import urlsafe_base64_encode
+from django.utils.encoding import force_bytes
+from django.contrib.auth.tokens import default_token_generator
+from django.core import mail
 import os
 import logging
 
@@ -783,6 +787,8 @@ class PasswordResetTests(TestCase):
         # Django's built-in PasswordResetConfirmView handles token validation
         # and displays the form if valid.
         response = self.client.get(confirm_url)
+        if response.status_code == 302:
+             raise Exception(f"Password reset redirect! To: {response.url}")
         # If the view redirects (302), it might be because the token is considered invalid
         # or already used in this test context.
         self.assertEqual(response.status_code, 200)

@@ -123,12 +123,12 @@ def login_view(request):
     return render(request, 'mucyo_aime_maxime/login.html', {'form': form, 'next': next_url})
 
 
-@login_required(login_url='mucyo_aime_maxime:login')
 @require_http_methods(["POST"])
+@login_required(login_url='mucyo_aime_maxime:login')
 def logout_view(request):
     """Handle user logout."""
     # Get redirect target
-    next_url = request.GET.get('next', 'mucyo_aime_maxime:login')
+    next_url = request.POST.get('next', 'mucyo_aime_maxime:login')
 
     username = request.user.username
     user_id = request.user.id
@@ -142,6 +142,8 @@ def logout_view(request):
         allowed_hosts={request.get_host()},
         require_https=request.is_secure()
     ):
+        if next_url.startswith('/'):
+            return redirect(next_url)
         return redirect(next_url)
     return redirect('mucyo_aime_maxime:login')
 

@@ -162,6 +162,24 @@
                 <span>Welcome, {{ user.username }}!</span>
                 <a href="{% url 'mucyo_aime_maxime:profile' %}">Profile</a>
                 <a href="{% url 'mucyo_aime_maxime:password_change' %}">Change Password</a>
+                
+                <!-- Staff-only links -->
+                {% if user.is_staff or user.groups.all.0.name == 'Staff' or user.is_superuser %}
+                    <a href="{% url 'mucyo_aime_maxime:staff_dashboard' %}" style="color: #f39c12;">Staff Dashboard</a>
+                {% endif %}
+                
+                <!-- Instructor-only links -->
+                {% if user.groups.all|length > 0 %}
+                    {% for group in user.groups.all %}
+                        {% if group.name == 'Instructor' %}
+                            <a href="{% url 'mucyo_aime_maxime:instructor_reports' %}" style="color: #e74c3c;">Reports</a>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+                {% if user.is_superuser %}
+                    <a href="{% url 'mucyo_aime_maxime:instructor_reports' %}" style="color: #e74c3c;">Reports</a>
+                {% endif %}
+                
                 <a href="{% url 'mucyo_aime_maxime:logout' %}">Logout</a>
             {% else %}
                 <a href="{% url 'mucyo_aime_maxime:register' %}">Register</a>

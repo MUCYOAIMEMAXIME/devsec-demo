@@ -1,5 +1,5 @@
 from django.test import TestCase, Client
-from django.contrib.auth.models import User
+from django.contrib.auth.models import User, Group
 from django.urls import reverse
 
 
@@ -207,3 +207,139 @@ class PasswordChangeTests(TestCase):
         }
         response = self.client.post(self.password_change_url, data)
         self.assertEqual(response.status_code, 200)
+
+
+class RoleBasedAccessControlTests(TestCase):
+    """Tests for role-based access control and authorization."""
+
+    def setUp(self):
+        self.client = Client()
+        
+        # Create test users with different roles
+        self.regular_user = User.objects.create_user(
+            'regularuser',
+            'regular@example.com',
+            'testpass123'
+        )
+        
+        self.staff_user = User.objects.create_user(
+            'staffuser',
+            'staff@example.com',
+            'testpass123'
+        )
+        
+        self.instructor_user = User.objects.create_user(
+            'instructoruser',
+            'instructor@example.com',
+            'testpass123'
+        )
+        
+        self.admin_user = User.objects.create_superuser(
+            'adminuser',
+            'admin@example.com',
+            'testpass123'
+        )
+        
+        # Create and assign groups
+        self.staff_group = Group.objects.create(name='Staff')
+        self.instructor_group = Group.objects.create(name='Instructor')
+        
+        self.staff_user.groups.add(self.staff_group)
+        self.instructor_user.groups.add(self.instructor_group)
+        
+        # Set up URLs
+        self.staff_dashboard_url = reverse('mucyo_aime_maxime:staff_dashboard')
+        self.instructor_reports_url = reverse('mucyo_aime_maxime:instructor_reports')
+        self.profile_url = reverse('mucyo_aime_maxime:profile')
+
+    def test_anonymous_user_cannot_access_staff_dashboard(self):
+        """Test that anonymous users are redirected from staff dashboard."""
+        response = self.client.get(self.staff_dashboard_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/auth/login/', response.url)
+
+    def test_regular_user_cannot_access_staff_dashboard(self):
+        """Test that regular authenticated users cannot access staff dashboard."""
+        self.client.login(username='regularuser', password='testpass123')
+        response = self.client.get(self.staff_dashboard_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/auth/profile/', response.url)
+
+    def test_staff_user_can_access_staff_dashboard(self):
+        """Test that staff users can access staff dashboard."""
+        self.client.login(username='staffuser', password='testpass123')
+        response = self.client.get(self.staff_dashboard_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'mucyo_aime_maxime/staff_dashboard.html')
+
+    def test_instructor_cannot_access_staff_dashboard(self):
+        """Test that instructor users cannot access staff dashboard."""
+        self.client.login(username='instructoruser', password='testpass123')
+        response = self.client.get(self.staff_dashboard_url)
+        self.assertEqual(response.status_code, 302)
+
+    def test_admin_can_access_staff_dashboard(self):
+        """Test that admin/superuser can access staff dashboard."""
+        self.client.login(username='adminuser', password='testpass123')
+        response = self.client.get(self.staff_dashboard_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'mucyo_aime_maxime/staff_dashboard.html')
+
+    def test_anonymous_user_cannot_access_instructor_reports(self):
+        """Test that anonymous users are redirected from instructor reports."""
+        response = self.client.get(self.instructor_reports_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/auth/login/', response.url)
+
+    def test_regular_user_cannot_access_instructor_reports(self):
+        """Test that regular users cannot access instructor reports."""
+        self.client.login(username='regularuser', password='testpass123')
+        response = self.client.get(self.instructor_reports_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/auth/profile/', response.url)
+
+    def test_staff_cannot_access_instructor_reports(self):
+        """Test that staff users cannot access instructor reports."""
+        self.client.login(username='staffuser', password='testpass123')
+        response = self.client.get(self.instructor_reports_url)
+        self.assertEqual(response.status_code, 302)
+
+    def test_instructor_can_access_instructor_reports(self):
+        """Test that instructor users can access instructor reports."""
+        self.client.login(username='instructoruser', password='testpass123')
+        response = self.client.get(self.instructor_reports_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'mucyo_aime_maxime/instructor_reports.html')
+
+    def test_admin_can_access_instructor_reports(self):
+        """Test that admin/superuser can access instructor reports."""
+        self.client.login(username='adminuser', password='testpass123')
+        response = self.client.get(self.instructor_reports_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'mucyo_aime_maxime/instructor_reports.html')
+
+    def test_authenticated_user_can_access_profile(self):
+        """Test that authenticated users can access their profile."""
+        self.client.login(username='regularuser', password='testpass123')
+        response = self.client.get(self.profile_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTemplateUsed(response, 'mucyo_aime_maxime/profile.html')
+
+    def test_anonymous_user_redirected_to_login_for_profile(self):
+        """Test that anonymous users are redirected to login for profile."""
+        response = self.client.get(self.profile_url)
+        self.assertEqual(response.status_code, 302)
+        self.assertIn('/auth/login/', response.url)
+
+    def test_staff_user_in_correct_group(self):
+        """Test that staff user is in Staff group."""
+        self.assertTrue(self.staff_user.groups.filter(name='Staff').exists())
+
+    def test_instructor_user_in_correct_group(self):
+        """Test that instructor user is in Instructor group."""
+        self.assertTrue(self.instructor_user.groups.filter(name='Instructor').exists())
+
+    def test_regular_user_has_no_privileged_groups(self):
+        """Test that regular user is not in any privileged groups."""
+        self.assertFalse(self.regular_user.groups.filter(name__in=['Staff', 'Instructor']).exists())
+
